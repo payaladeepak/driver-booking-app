@@ -1,0 +1,48 @@
+name: CI - PHP / Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v4
+        with:
+          php-version: '8.2'
+          coverage: none
+          tools: composer:v2
+          extensions: mbstring, bcmath, pdo_sqlite, pdo_mysql
+          ini-values: post_max_size=256M, memory_limit=2G
+
+      - name: Get composer cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer install --no-progress --no-suggest --prefer-dist
+
+      - name: Prepare .env.testing
+        run: |
+          cp .env.example .env.testing || true
+          php artisan key:generate --env=testing --no-interaction
+
+      - name: Create SQLite database for tests
+        run: |
+          mkdir -p database
+          touch database/database.sqlite
+          php artisan migrate --env=testing --no-interaction --force
+
+      - name: Run tests
+        run: |
+          ./vendor/bin/phpunit --configuration phpunit.xml --testsuite=Feature
